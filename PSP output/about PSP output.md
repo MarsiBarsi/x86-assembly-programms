@@ -1,2 +1,3 @@
-# x86-assembly-programms
-programs for dos to introduce to assembly language
+program outputs 100 bytes of Program Segment Prefix
+
+There are enters after each 8 bytes to see parametrs of program (bytes on command-line).
