@@ -93,7 +93,7 @@ ok_of_opening:
   next_line
   print_mes 'Text for file > '
 
-  
+
 
 
   int 20h
