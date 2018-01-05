@@ -93,10 +93,13 @@ ok_of_opening:
   next_line
   print_mes 'Text for file > '
 
-<<<<<<< HEAD
+  mov AH, 40h;
+  mov BX, Handler
+  mov CX, BufLen
+  mov DX, OFFSET Buf
+  int 21H
+  jc error_of_opening
 
-=======
->>>>>>> e7233d57fca0d6bf207b2602fa68c03716749970
 
 
   int 20h
@@ -108,3 +111,7 @@ error_of_opening:
 
 FileName DB 14,0,14 dup (0)
 Handler DW ?
+
+
+Buf DB '0123456789' ; data for a file
+BufLen EQU $ - Buf
