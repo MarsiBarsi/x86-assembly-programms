@@ -93,7 +93,10 @@ ok_of_opening:
   next_line
   print_mes 'Text for file > '
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> e7233d57fca0d6bf207b2602fa68c03716749970
 
 
   int 20h
