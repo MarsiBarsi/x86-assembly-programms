@@ -31,13 +31,49 @@ print_mes macro message
   msg DB message,'$'
   nxt:
 endm
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;
+count macro letter
+    xor dx,dx
+    div bx
+    add dl,'0'
+    mov amount[letter],dl
+endm
+;;;
+ax_hex_to_dec_and_write macro
+  local end
+  xor cx,cx
+  mov bx,10
+
+  count 2
+  test ax,ax
+  jz end
+  count 1
+  test ax,ax
+  jz end
+  count 0
+
+  end:
+
+  mov AH, 40h          ; write into file
+  mov BX, Handler      ;
+  mov CX, 3            ;
+  mov DX, OFFSET amount   ;
+  int 21H              ;
+  jc error_of_writing  ; if there is error
+
+  mov amount[0],0
+  mov amount[1],0
+  mov amount[2],0
+endm
+
 ;=====================================================
 ; main:
 start:
   next_line
 ;------- check string of parameters -------------------------
-  mov CL, ES:[80h]  ; addr. of length parameter in psp
-    cmp CL, 0       ; is it 0 in buffer?
+  mov CL, ES:[80h]            ; addr. of length parameter in psp
+    cmp CL, 0                 ; is it 0 in buffer?
         jne $with_parametrs   ; yes
 ;---------------------------------------------------------------
 ; without parameters:
@@ -87,31 +123,158 @@ $with_parametrs:
 ok_of_opening:
   mov Handler, AX
 
-  next_line
+
   print_mes 'The file has been successfully opened'
 
   next_line
   print_mes 'Text for file > '
+  next_line
 
-  mov AH, 40h;
-  mov BX, Handler
-  mov CX, BufLen
-  mov DX, OFFSET Buf
-  int 21H
-  jc error_of_opening
+  xor si,si     ; counter of symbols
+  xor di,di     ; russian symbols
+  xor bp,bp     ; latin symbols
+
+  cycle_for_input_into_buf:
+
+     mov ah, 01h       ;
+	   int 21h           ;
+     mov Buf[si], al   ;
+
+     cmp Buf[si],13
+     je write_buf_into_file
+    ;-----------------------------------------------------
+     check_for_russian:
+        cmp Buf[si], 127      ; is Buf[si] in ASCII codes of russian symbols?
+        jle  check_for_latin  ;
+        cmp Buf[si], 192
+        jl check_for_latin
+        cmp Buf[si], 255      ;
+        je check_for_latin    ;
+
+        inc di              ; if yes then di+=1
+     ;-----------------------------------------------------
+
+     check_for_latin:
+        cmp Buf[si], 65     ; is Buf[si] in ASCII codes of latin symbols?
+        jl check_of_lenght  ;
+        cmp Buf[si], 122    ;
+        jg check_of_lenght  ;
+        cmp Buf[si], 91     ;
+        jl ok_latin
+        cmp Buf[si],96
+        jg ok_latin
+
+        jmp check_of_lenght ; if between 91 and 96(not latin symbols)
+
+        ok_latin:
+          inc bp             ; if yes then bp+=1
+      ;-----------------------------------------------------
 
 
+      check_of_lenght:      ; because buf for 255 bytes
+          cmp si, 255       ;
+          je limit_of_lenght;
+      ;-----------------------------------------------------
 
-  int 20h
+      inc si                ; next step of cycle
+
+    jmp cycle_for_input_into_buf ; end of cycle
+
+;===============writing of text=======================
+
+    write_buf_into_file:
+
+      mov AH, 40h          ; write into file
+      mov BX, Handler      ;
+      mov CX, si           ;
+      mov DX, OFFSET Buf   ;
+      int 21H              ;
+      jc error_of_writing  ; if there is error
+
+;================writing of statistics================
+; ---------------Symbols:-----------------------------
+      mov AH, 40h          ; write into file text
+      mov BX, Handler      ;
+      mov CX, symbols_amount_len            ;
+      mov DX, OFFSET symbols_amount   ;
+      int 21H              ;
+      jc error_of_writing  ; if there is error
+
+      mov ax,si
+      ax_hex_to_dec_and_write
+;----------------Strings:-----------------------------
+      mov AH, 40h          ; write into file text
+      mov BX, Handler      ;
+      mov CX, strings_amount_len            ;
+      mov DX, OFFSET strings_amount   ;
+      int 21H              ;
+      jc error_of_writing  ; if there is error
+
+      mov ax,si           ; ax = (si div 80)
+      mov bl,80
+      div bl              ; 80 - lenght of full string in DOS
+      xor ah,ah
+      ax_hex_to_dec_and_write
+;-----------------Russian-----------------------------
+      mov AH, 40h          ; write into file text
+      mov BX, Handler      ;
+      mov CX, russian_symbols_amount_len            ;
+      mov DX, OFFSET russian_amount   ;
+      int 21H              ;
+      jc error_of_writing  ; if there is error
+
+      mov ax,di
+      ax_hex_to_dec_and_write
+;------------------Latin--------------------------------
+      mov AH, 40h          ; write into file text
+      mov BX, Handler      ;
+      mov CX, latin_symbols_amount_len           ;
+      mov DX, OFFSET latin_amount   ;
+      int 21H              ;
+      jc error_of_writing  ; if there is error
+
+      mov ax,bp
+      ax_hex_to_dec_and_write
+;==============================================================
+;-----------Success: ------------------------------------------
+
+    next_line
+    print_mes 'the program has been successfully completed.'
+
+  int 20h ; exit
 ;
 error_of_opening:
   next_line
   print_mes 'Error of opening, try again'
   jmp $without_parametrs
 
+error_of_writing:
+  next_line
+  print_mes 'Error of writing, try again'
+  jmp ok_of_opening
+
+limit_of_lenght:
+  next_line
+  print_mes 'unfortunately, the maximum length of text is 255 characters'
+  jmp write_buf_into_file
+
+
 FileName DB 14,0,14 dup (0)
 Handler DW ?
 
+Buf db 255 dup (0)
+;BufLen EQU $ - Buf
 
-Buf DB '0123456789' ; data for a file
-BufLen EQU $ - Buf
+symbols_amount db 10,13,'total were entered symbols: '
+symbols_amount_len equ $ - symbols_amount
+
+strings_amount db 10,13,'Strings: '
+strings_amount_len equ $ - strings_amount
+
+russian_amount db 10,13,'Russian symbols: '
+russian_symbols_amount_len equ $ - russian_amount
+
+latin_amount db 10,13,'Latin symbols: '
+latin_symbols_amount_len equ $ - latin_amount
+
+amount db 3 dup (0)
