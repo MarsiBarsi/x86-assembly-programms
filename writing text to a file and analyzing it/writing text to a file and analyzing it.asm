@@ -33,38 +33,38 @@ print_mes macro message
 endm
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;
-count macro letter
+count macro letter    ; macro for ax_hex_to_dec_and_write
     xor dx,dx
     div bx
     add dl,'0'
     mov amount[letter],dl
 endm
 ;;;
-ax_hex_to_dec_and_write macro
+ax_hex_to_dec_and_write macro   ; value of ax to dec
   local end
   xor cx,cx
   mov bx,10
 
-  count 2
+  count 2                       ; third number
   test ax,ax
   jz end
-  count 1
+  count 1                       ; second number
   test ax,ax
   jz end
-  count 0
+  count 0                       ; first number
 
-  end:
+  end:                          ; write amount[] to file
 
-  mov AH, 40h          ; write into file
-  mov BX, Handler      ;
-  mov CX, 3            ;
-  mov DX, OFFSET amount   ;
-  int 21H              ;
-  jc error_of_writing  ; if there is error
+    mov AH, 40h          ; write into file
+    mov BX, Handler      ;
+    mov CX, 3            ;
+    mov DX, OFFSET amount   ;
+    int 21H              ;
+    jc error_of_writing  ; if there is error
 
-  mov amount[0],0
-  mov amount[1],0
-  mov amount[2],0
+    mov amount[0],0 ; zeros to amount to use again
+    mov amount[1],0 ;
+    mov amount[2],0 ;
 endm
 
 ;=====================================================
@@ -122,7 +122,6 @@ $with_parametrs:
 ;=====================================================
 ok_of_opening:
   mov Handler, AX
-
 
   print_mes 'The file has been successfully opened'
 
@@ -184,7 +183,7 @@ ok_of_opening:
 
     write_buf_into_file:
 
-      mov AH, 40h          ; write into file
+      mov AH, 40h          ; write Buf into file
       mov BX, Handler      ;
       mov CX, si           ;
       mov DX, OFFSET Buf   ;
@@ -193,17 +192,17 @@ ok_of_opening:
 
 ;================writing of statistics================
 ; ---------------Symbols:-----------------------------
-      mov AH, 40h          ; write into file text
+      mov AH, 40h          ; write symbols_amount text into file
       mov BX, Handler      ;
       mov CX, symbols_amount_len            ;
       mov DX, OFFSET symbols_amount   ;
       int 21H              ;
       jc error_of_writing  ; if there is error
 
-      mov ax,si
-      ax_hex_to_dec_and_write
+      mov ax,si                 ; amount to ax
+      ax_hex_to_dec_and_write   ; write amount into file
 ;----------------Strings:-----------------------------
-      mov AH, 40h          ; write into file text
+      mov AH, 40h          ; write strings_amount text into file
       mov BX, Handler      ;
       mov CX, strings_amount_len            ;
       mov DX, OFFSET strings_amount   ;
@@ -213,28 +212,29 @@ ok_of_opening:
       mov ax,si           ; ax = (si div 80)
       mov bl,80
       div bl              ; 80 - lenght of full string in DOS
-      xor ah,ah
-      ax_hex_to_dec_and_write
+
+      xor ah,ah                 ; amount to ax
+      ax_hex_to_dec_and_write   ; write amount into file
 ;-----------------Russian-----------------------------
-      mov AH, 40h          ; write into file text
+      mov AH, 40h          ; write russian_amount text into file
       mov BX, Handler      ;
       mov CX, russian_symbols_amount_len            ;
       mov DX, OFFSET russian_amount   ;
       int 21H              ;
       jc error_of_writing  ; if there is error
 
-      mov ax,di
-      ax_hex_to_dec_and_write
+      mov ax,di                 ; amount to ax
+      ax_hex_to_dec_and_write   ; write amount into file
 ;------------------Latin--------------------------------
-      mov AH, 40h          ; write into file text
+      mov AH, 40h          ; write latin_amount text into file
       mov BX, Handler      ;
       mov CX, latin_symbols_amount_len           ;
       mov DX, OFFSET latin_amount   ;
       int 21H              ;
       jc error_of_writing  ; if there is error
 
-      mov ax,bp
-      ax_hex_to_dec_and_write
+      mov ax,bp                ; amount to ax
+      ax_hex_to_dec_and_write  ; write amount into file
 ;==============================================================
 ;-----------Success: ------------------------------------------
 
@@ -263,7 +263,6 @@ FileName DB 14,0,14 dup (0)
 Handler DW ?
 
 Buf db 255 dup (0)
-;BufLen EQU $ - Buf
 
 symbols_amount db 10,13,'total were entered symbols: '
 symbols_amount_len equ $ - symbols_amount
