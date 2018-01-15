@@ -213,7 +213,8 @@ ok_of_opening:
       mov bl,80
       div bl              ; 80 - lenght of full string in DOS
 
-      xor ah,ah                 ; amount to ax
+      xor ah,ah
+      inc al                 ; amount to ax
       ax_hex_to_dec_and_write   ; write amount into file
 ;-----------------Russian-----------------------------
       mov AH, 40h          ; write russian_amount text into file
