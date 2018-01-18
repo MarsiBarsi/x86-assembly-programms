@@ -1,7 +1,7 @@
 # x86-assembly-programms
 
 **en:**
-A set of sample programs of different levels of complexity in assembly language.
+A set of different complexity level programs-samples in assembly language.
 
 **ru:**
 Набор программ-примеров разного уровня сложности на языке ассемблера
