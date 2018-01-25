@@ -33,115 +33,61 @@ print_mes macro message
 endm
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;
-count macro letter    ; macro for ax_hex_to_dec_and_write
-    xor dx,dx
-    div bx
-    add dl,'0'
-    mov amount[letter],dl
-endm
-;;;
-ax_hex_to_dec_and_write macro   ; value of ax to dec
-  local end
-  xor cx,cx
-  mov bx,10
-
-  count 2                       ; third number
-  test ax,ax
-  jz end
-  count 1                       ; second number
-  test ax,ax
-  jz end
-  count 0                       ; first number
-
-  end:                          ; write amount[] to file
-
-    mov AH, 40h          ; write into file
-    mov BX, Handler      ;
-    mov CX, 3            ;
-    mov DX, OFFSET amount   ;
-    int 21H              ;
-    jc error_of_writing  ; if there is error
-
-    mov amount[0],0 ; zeros to amount to use again
-    mov amount[1],0 ;
-    mov amount[2],0 ;
-endm
 
 ;=====================================================
 ; main:
 start:
   next_line
-;------- check string of parameters -------------------------
-  mov CL, ES:[80h]            ; addr. of length parameter in psp
-    cmp CL, 0                 ; is it 0 in buffer?
-        jne $with_parametrs   ; yes
-;---------------------------------------------------------------
-; without parameters:
-$without_parametrs:
-  print_mes 'parameters have not been entered'
-  next_line
-  print_mes 'Please, input file name > '
+  print_mes 'Please, input mask > '
 
   mov AH, 0Ah
-  mov DX, offset FileName
+  mov DX, offset searchmask
   int 21h
 
   next_line
 ;===============================================================
   xor BH, BH
-  mov BL, FileName[1]
-  mov FileName[BX+2], 0
-;===============================================================
-  ;mov AX, 3D01h ; Open file for write
-  ;mov DX, offset FileName+2
-  ;int 21h
-  ;jnc ok_of_opening
-  ;jmp error_of_opening
-  jmp ok_of_opening
-;---------------------------------------------------------------
-$with_parametrs:
-  xor BH, BH
-  mov BL, ES:[80h]
-  mov byte ptr [BX+81h],0
-;---------------------------------------------------------------
-  mov CL, ES:80h  ; length of parameter string in PSP
-  xor CH,CH     ; CX=CL= length of parameter string
-  cld           ; DF=0 - forward direction flag
-  mov DI, 81h   ; ES:DI-> start of parameter string in PSP
-  mov AL,' '    ; delete spaces in start
-  repe scasb    ; scan while spaces
-                ; AL - (ES:DI) -> proc flags
-                ; repeat while elements are equal
-  dec DI        ; DI-> first symbol after spaces
-;---------------------------------------------------------------
-  ;mov AX, 3D01h ; Open file for write
-  ;mov DX, DI
-  ;int 21h
-  ;jnc ok_of_opening
-  ;jmp error_of_opening
-;=====================================================
-ok_of_opening:
-  mov Handler, AX
+  mov BL, searchmask[1]
+  mov searchmask[BX+2], 0
 
-  print_mes 'Ok'
+;---------------------------------------------------------------
+
+;=====================================================
+
+
+   mov ax, 4E01h              ;найдём первый файл в текущем каталоге
+   xor cx, cx                 ; кладем 0, потому что атрибуты не нужны. Ищем в своем каталоге
+   lea dx, searchmask[2]      ;возьмём указатель на маску поиска
+   int 21h
+   jc no_more_files           ;если была ошибка - файлов по такой маске нет
+
+   mov ah, 41h
+   mov dx, 80h+1Eh
+   int 21h
+
+deleting:
+    mov ax, 4F00h       ;ищем следующий файл
+    int 21h
+    jc finish           ;если не находим - выйдем
+
+    mov ah, 41h         ; удаляем найденный файл
+    mov dx, 80h+1Eh     ;
+    int 21h             ;
+  jmp deleting          
 
 ;==============================================================
-;-----------Success: ------------------------------------------
-
+;-----------Успешное завершение: ------------------------------------------
+finish:
+    next_line
+    print_mes 'all files have been found'
     next_line
     print_mes 'the program has been successfully completed.'
 
   int 20h ; exit
-;
-error_of_opening:
-  next_line
-  print_mes 'Error of opening, try again'
-  jmp $without_parametrs
+
+no_more_files:
+  print_mes 'the are no files with such name'
+  int 20h
 
 
-
-FileName DB 14,0,14 dup (0)
-Handler DW ?
-
-Buf db 255 dup (0)
-buf_len equ $ - Buf
+searchmask db 14,0,14 dup (0)
