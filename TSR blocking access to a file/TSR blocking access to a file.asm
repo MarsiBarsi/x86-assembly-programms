@@ -5,13 +5,13 @@
 
       jmp real_start                ;прыгаем на начало программы
 magic       dw 0BABAh               ;идентификатор - уже сидим в памяти
-logfile     db 'c:\klog.txt',0      ;имя файла
+logfile     db 'file.txt',0      ;имя файла
 handle            dw 0              ;заголовок (хендл)
 buf         db 41 dup (?)           ;буффер 40 байт + 1 байт на всякий
 bufptr            dw 0              ;текущий указатель буффера (смещение)
 must_write  db 0                    ;флаг готовности к записи
 
-mes db 'Hello world!$'
+mes db 'sorry,this file is blocked$'
 
 ;Новый обработчик 09h прерывания
 new_09h:
@@ -25,10 +25,6 @@ new_09h:
       in    al, 60h                 ;получить сканкод
       cmp al,3Bh                    ; нажата f1 ?
       jne    call_old_09
-
-
-
-
 
 call_old_09:
       ;sti                          ;разрешим прерывания
@@ -50,10 +46,25 @@ new_21h:
       push  cs
       pop   ds
 
+
       cmp ah,3dh
-      je yes
+      je our_command
+
+      cmp ah,41h
+      je our_command
+
+      cmp ah,3Fh
+      je our_command
+
+      cmp ah,40h
+      je our_command
       jmp call_old_21
-yes:
+
+our_command:
+
+      cmp dx,offset logfile
+      jne call_old_21
+
       mov ah,09h
       mov dx,offset mes
       int 21h
