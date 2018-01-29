@@ -1,71 +1,203 @@
+.MODEL Tiny
+.CODE
+.STARTUP
+.386                                ;для jump near и команд pusha и popa
 
-       ;in    al,60h         ;читаем клаву
-       ;cmp   al,3Bh         ;F1 ?
-       ;jne   @To_old        ;нет!
+      jmp real_start                ;прыгаем на начало программы
+magic       dw 0BABAh               ;идентификатор - уже сидим в памяти
+logfile     db 'c:\klog.txt',0      ;имя файла
+handle            dw 0              ;заголовок (хендл)
+buf         db 41 dup (?)           ;буффер 40 байт + 1 байт на всякий
+bufptr            dw 0              ;текущий указатель буффера (смещение)
+must_write  db 0                    ;флаг готовности к записи
 
-       org        80h
-cmd_len            db    ?          ; длина командной строки
-cmd_line           db    ?          ; начало командной строки
+mes db 'Hello world!$'
 
-       org     100h
-
-       ;===============================================================
-
-       start:  jmp     initze   ;Выполняется только один раз
-       tsr: pusha    ;Сохранить регистры
-               push ds
-               push 40h
-               pop ds
-
-               in al,60h
-               cmp al,3Bh
-               jne exit          ; нет - выйти
-
-
-
-              mov ah,02h
-              mov dx,'>'
-              int 21H
-
-
-              next_line
-            ;===============================================================
-              xor BH, BH
-              mov BL, cmd_len[0]
-            ;===============================================================
-              mov AX, 3D01h ; Open file for write
-              mov DX, offset cmd_line+2
-              int 21h
-
-              next_line
-
-              mov Buf[0], al
-
-              mov AH, 40h          ; write Buf into file
-              mov BX, Handler      ;
-              mov CX, si           ;
-              mov DX, OFFSET Buf   ;
-              int 21H              ;
+;Новый обработчик 09h прерывания
+new_09h:
+      pushf                         ;сохраняем все флаги
+      pusha                         ;основные регистры
+      push  es                      ;регистры ES и DS
+      push  ds
+      push  cs                      ;в DS равен CS
+      pop   ds
+      ;cli                          ;запретим прерывания
+      in    al, 60h                 ;получить сканкод
+      cmp al,3Bh                    ; нажата f1 ?
+      jne    call_old_09
 
 
-       exit:   pop ds
-               popa  ;Восстановить регистры
-           db 0EAh  ;Обработать прерывание
-       kbsave  dd   ?;двойное слово для сохранения обработчика адреса int 9 BIOS
 
-       Handler DW ?
-       Buf db 'privet'
 
-       initze: push 0;Подпрограмма инициализации
-               pop ds;Установить сегмент данных ds=0
-               cli   ;Запретить прерывания
-           mov si,9*4  ; адрес для int 9 в таблице векторов прерываний
-           mov di,offset kbsave;для COM-программ es=cs
-               movsw;ds:[9*4]->cs:kbsave;сохранить смещение старого обработчика
-               movsw;ds:[9*4+2]->cs:kbsave+2;сохранить сегменный адрес старого обработчика
-               mov word ptr ds:[si-4],offset tsr;подменить смещение int 9 на смещение нового обработчика
-               mov word ptr ds:[si-2],cs;подменить сегменный адрес int 9 на сегменный адрес нового обработчика
-               sti    ;Разрешить прерывания
-               mov dx,offset initze;Размер программы
-               int 27h;Завершить и остаться резидентом
-       end     begin
+
+call_old_09:
+      ;sti                          ;разрешим прерывания
+      pop   ds
+      pop   es
+      popa
+      popf                          ;востановим всю хренотень
+      db 0eah                       ;jmp dword ptr (опкод)
+old_09_offset  dw ?                 ;здесь уже конкретный адрес
+old_09_segment dw ?                 ;старого Int 09. прыгаем туда
+
+;Новый обработчик 21h прерывания
+;DOS IDLE INTERRUPT
+new_21h:
+      pushf                         ;сейвим все что будем менять
+      pusha
+      push  es
+      push  ds
+      push  cs
+      pop   ds
+
+      cmp ah,3dh
+      je yes
+      jmp call_old_21
+yes:
+      mov ah,09h
+      mov dx,offset mes
+      int 21h
+
+
+
+call_old_21:
+      pop   ds                      ;восстанавливаем флаги и
+      pop   es                      ;все такое прочее
+      popa                          ;то что меняли
+      popf
+      db 0eah                       ;и прыгаем на старый обработчик
+old_21_offset  dw ?
+old_21_segment dw ?
+
+
+;СТАРТ основной программы
+real_start:
+      mov   ax,3509h                ;получить в ES:BX вектор 09
+      int   21h                     ;прерывания
+
+      cmp   byte ptr ds:[82h],'-'   ;проверяем параметр командной
+      je    remove                  ;строки. Равен "-" -выгружаемсо
+
+      cmp   word ptr es:magic,0BABAh;сравниваем с идентификатором
+      je    already_inst            ;мы уже загружены - выходим
+
+      push  es
+      mov   ax,ds:[2Ch]             ;psp
+      mov   es,ax
+      mov   ah,49h                  ;хватит памяти чтоб остаться
+      int   21h                     ;резидентом?
+      pop   es
+      jc    not_mem                 ;не хватило - выходим
+
+      mov   cs:old_09_offset,bx     ;запомним старый адрес 09
+      mov   cs:old_09_segment,es    ;прерывания
+      mov   ax,2509h                ;установим вектор на 09
+      mov   dx,offset new_09h       ;прерывание
+      int   21h
+
+      mov   ax,3521h                ;получить в ES:BX вектор 21
+      int   21h                     ;прерывания
+      mov   cs:old_21_offset,bx     ;запомним старый адрес 21
+      mov   cs:old_21_segment,es    ;прерывания
+      mov   ax,2521h                ;установим вектор на 21
+      mov   dx,offset new_21h       ;прерывание
+      int   21h
+
+      call  create_log_file         ;проверяем лог-файл.
+                                    ;если нет - создаем.
+
+      mov   dx,offset ok_installed  ;выводим что все ок
+      mov   ah,9
+      int   21h
+      mov   dx,offset real_start    ;остаемся в памяти резидентом
+      int   27h                     ;и выходим
+;КОНЕЦ основной программы
+
+;Проверим существует ли файл, если нет
+;создадим его. Процедура.
+create_log_file:
+      mov   ax, 3D01h
+      lea   dx, logfile
+      int   21h                     ;попробуем открыть файл
+      mov   handle, ax              ;
+      jnc   clog4                   ;файл есть - закрываем его
+
+ clog3: mov ah, 3Ch                 ;создаем файл
+      mov   cx, 02h                 ;аттрибут - скрытый
+      lea   dx, logfile
+      int   21h
+      mov   handle, ax
+
+ clog4: mov bx, handle              ;закрываем файл
+      mov   ah, 3Eh
+      int   21h
+      ret
+
+;сюда попадаем если в командной строке
+;был указан ключ "-". Выгружаемся из памяти
+remove:
+      cmp   word ptr es:magic,0BABAh;а мы ваще были загружены?
+      jne   not_installed           ;не были - выходим
+
+      push  es
+      push  ds
+      mov   dx,es:old_09_offset     ;возвращаем вектор прерывания
+      mov   ds,es:old_09_segment    ;09 как и было
+      mov   ax,2509h
+      int   21h
+
+      mov   dx,es:old_21_offset     ;востановим вектор прерывания
+      mov   ds,es:old_21_segment    ;28 как было
+      mov   ax,2521h
+      int   21h
+
+      pop   ds
+      pop   es
+      mov   ah,49h                  ;освобождаем память
+      int   21h
+      jc    not_remove              ;не освободилась? Хз - ошибка
+
+      mov   dx,offset removed_msg   ;выводим сообщение - все ок
+      mov   ah,9                    ;выгрузились
+      int   21h
+      jmp   exit                    ;выходим воще из проги
+
+;Сюда попадаем если был указан ключ "-", но перед
+;этим tsr не был загружен
+not_installed:
+      mov   dx, offset noinst_msg
+      mov   ah,9
+      int   21h
+      jmp   exit
+
+;Какая-то ошибка с высвобождением памяти.
+not_remove:
+      mov   dx, offset noremove_msg
+      mov   ah,9
+      int   21h
+      jmp   exit
+
+;Пользователь пытается повторно загрузить прогу
+already_inst:
+      mov   dx, offset already_msg
+      mov   ah,9
+      int   21h
+      jmp   exit
+
+;Не хватает памяти чтоб остаться резидентом
+not_mem:
+      mov   dx, offset nomem_msg
+      mov   ah,9
+      int   21h
+
+;Выходим из программы
+exit:
+      int  20h
+
+ok_installed      db 'tsr successful installed$'
+already_msg       db 'tsr already installed$'
+nomem_msg         db 'No free memory for loading tsr$'
+removed_msg       db 'tsr successful removed$'
+noremove_msg      db 'Can not remove tsr. Error$'
+noinst_msg        db 'tsr not installed. Nothing remove$'
+END
