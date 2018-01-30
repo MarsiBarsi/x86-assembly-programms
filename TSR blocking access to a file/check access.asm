@@ -88,10 +88,9 @@ $with_parametrs:
   jmp error_of_opening
 ;=====================================================
 ok_of_opening:
-  mov ah,41h
-;  mov al, 1
+  mov Handler, AX
 
-;  mov cx, 7
+  mov ah,40h
   mov DX, offset FileName+2
   int 21h
 
@@ -109,17 +108,17 @@ success:
 error_of_opening:
   next_line
   print_mes 'Error of opening, try again'
-  jmp $without_parametrs
+  int 20h
 
   error_of_opening_new:
     next_line
     print_mes 'Error of opening, try again'
-    jmp $into_a_new_file
+    int 20h
 
 error_of_writing:
   next_line
   print_mes 'Error of writing, try again'
-  jmp ok_of_opening
+  int 20h
 
 
 FileName DB 14,0,14 dup (0)

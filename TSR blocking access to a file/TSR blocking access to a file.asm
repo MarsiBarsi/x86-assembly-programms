@@ -5,13 +5,11 @@
 
       jmp real_start                ;прыгаем на начало программы
 magic       dw 0BABAh               ;идентификатор - уже сидим в памяти
-logfile     db 'file.txt',0      ;имя файла
+Name_of_File     db 14,0,14 dup (0)      ;имя файла
 handle            dw 0              ;заголовок (хендл)
-buf         db 41 dup (?)           ;буффер 40 байт + 1 байт на всякий
-bufptr            dw 0              ;текущий указатель буффера (смещение)
-must_write  db 0                    ;флаг готовности к записи
+access_status  db 1                    ;флаг готовности к записи
 
-mes db 'sorry,this file is blocked$'
+mes db 'sorry,this file is blocked',10,13,'$'
 
 ;Новый обработчик 09h прерывания
 new_09h:
@@ -21,13 +19,21 @@ new_09h:
       push  ds
       push  cs                      ;в DS равен CS
       pop   ds
-      ;cli                          ;запретим прерывания
+                                    ;запретим прерывания
       in    al, 60h                 ;получить сканкод
       cmp al,3Bh                    ; нажата f1 ?
-      jne    call_old_09
+      jne call_old_09
+
+      cmp access_status,0           ; если 0 - ставим 1
+      je do_one
+
+      mov access_status,0           ; если 1 - ставим 0
+      jmp call_old_09
+
+do_one: mov access_status,1
 
 call_old_09:
-      ;sti                          ;разрешим прерывания
+
       pop   ds
       pop   es
       popa
@@ -46,51 +52,142 @@ new_21h:
       push  cs
       pop   ds
 
+      cmp access_status,1
+      je call_old_21
 
-      cmp ah,3dh
-      je our_command
+locked:
+      cmp ah,3dh              ; открытие файла
+      je with_filename
 
-      cmp ah,41h
-      je our_command
+      cmp ah,41h              ; удаление файла
+      je with_filename
 
-      cmp ah,3Fh
-      je our_command
+      cmp ah,3Fh              ; чтение из файла
+      je with_handle
 
-      cmp ah,40h
-      je our_command
+      cmp ah,40h              ; запись в файл
+      je with_handle
+
       jmp call_old_21
 
 our_command:
 
-      cmp dx,offset logfile
-      jne call_old_21
+  with_handle:  cmp bx,handle
+                jne call_old_21
+                pop   ds                      ;восстанавливаем флаги и
+                pop   es                      ;все такое прочее
+                popa                          ;то что меняли
+                popf
+                stc
+                mov bx,00ffh
+                jmp to_old
 
-      mov ah,09h
-      mov dx,offset mes
-      int 21h
-
-
+  with_filename:  cmp dx,offset Name_of_File
+                  jne call_old_21
+                  pop   ds                      ;восстанавливаем флаги и
+                  pop   es                      ;все такое прочее
+                  popa                          ;то что меняли
+                  popf
+                  stc
+                  mov dx,0
+                  jmp to_old
 
 call_old_21:
       pop   ds                      ;восстанавливаем флаги и
       pop   es                      ;все такое прочее
       popa                          ;то что меняли
       popf
-      db 0eah                       ;и прыгаем на старый обработчик
+to_old: db 0eah                       ;и прыгаем на старый обработчик
 old_21_offset  dw ?
 old_21_segment dw ?
 
 
 ;СТАРТ основной программы
 real_start:
+; macros:
+next_line macro
+  push AX
+  push DX
+
+  mov AH, 02h
+
+  mov DL, 13
+  int 21h
+  mov DL, 10
+  int 21h
+
+  pop DX
+  pop AX
+endm
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+print_mes macro message
+  local msg, nxt
+  push AX
+  push DX
+
+  mov AH,09h
+  mov DX, offset msg
+  int 21h
+
+  pop DX
+  pop AX
+  jmp nxt
+  msg DB message,'$'
+  nxt:
+endm
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+    cmp   word ptr es:magic,0BABAh;сравниваем с идентификатором
+    je    already_inst            ;мы уже загружены - выходим
+
+;------- check string of parameters -------------------------
+  mov CL, ES:[80h]            ; get lenght of parameters
+    cmp CL, 0                 ; if not 0
+        je $without_parametrs   ; go to with_parametrs
+;---------------------------------------------------------------
+$with_parametrs:
+
+    cmp   byte ptr ds:[82h],'-'   ;проверяем параметр командной
+    je    remove                  ;строки. Равен "-" -выгружаемсо
+
+    xor BH, BH
+    mov BL, ES:[80h]
+    mov byte ptr [BX+81h],0
+  ;---------------------------------------------------------------
+    mov CL, ES:80h  ; lenght of psp
+    xor CH,CH     ; CX=CL
+    cld           ; DF=0
+    mov DI, 81h   ; ES:DI-> di
+    mov AL,' '    ; if spaces - delete
+    repe scasb    ; while spaces
+
+    dec DI        ; di - first symbol of PSP paramets
+  ;---------------------------------------------------------------
+    mov dx, di
+    jmp int_vectors
+$without_parametrs:
+      print_mes 'parameters have not been entered'
+      next_line
+      next_line
+      print_mes 'Please, input filename > '
+
+      mov AH, 0Ah
+      mov DX, offset Name_of_File   ; mask to searchmask
+      int 21h
+
+      next_line
+    ;===============================================================
+      xor BH, BH                ; bh = 0
+      mov BL, Name_of_File[1]     ; length of searchmask to bl
+      mov Name_of_File[BX+2], 0   ; end of buffer = 0
+
+      lea dx, Name_of_File[2]      ; pointer for finding of a file
+
+
+
+int_vectors:
       mov   ax,3509h                ;получить в ES:BX вектор 09
       int   21h                     ;прерывания
-
-      cmp   byte ptr ds:[82h],'-'   ;проверяем параметр командной
-      je    remove                  ;строки. Равен "-" -выгружаемсо
-
-      cmp   word ptr es:magic,0BABAh;сравниваем с идентификатором
-      je    already_inst            ;мы уже загружены - выходим
 
       push  es
       mov   ax,ds:[2Ch]             ;psp
@@ -114,40 +211,38 @@ real_start:
       mov   dx,offset new_21h       ;прерывание
       int   21h
 
-      call  create_log_file         ;проверяем лог-файл.
+      call  create_file         ;проверяем лог-файл.
                                     ;если нет - создаем.
 
-      mov   dx,offset ok_installed  ;выводим что все ок
-      mov   ah,9
-      int   21h
+      print_mes 'tsr successful installed'
       mov   dx,offset real_start    ;остаемся в памяти резидентом
       int   27h                     ;и выходим
 ;КОНЕЦ основной программы
 
 ;Проверим существует ли файл, если нет
 ;создадим его. Процедура.
-create_log_file:
+create_file:
       mov   ax, 3D01h
-      lea   dx, logfile
+      lea   dx, Name_of_File
       int   21h                     ;попробуем открыть файл
       mov   handle, ax              ;
-      jnc   clog4                   ;файл есть - закрываем его
+      jnc   close_f                   ;файл есть - закрываем его
 
- clog3: mov ah, 3Ch                 ;создаем файл
-      mov   cx, 02h                 ;аттрибут - скрытый
-      lea   dx, logfile
-      int   21h
-      mov   handle, ax
+ create_f: mov ah, 3Ch                 ;создаем файл
+          mov   cx, 02h                 ;аттрибут - скрытый
+          lea   dx, logfile
+          int   21h
+          mov   handle, ax
 
- clog4: mov bx, handle              ;закрываем файл
-      mov   ah, 3Eh
-      int   21h
-      ret
+ close_f: mov bx, handle              ;закрываем файл
+          mov   ah, 3Eh
+          int   21h
+    ret
 
 ;сюда попадаем если в командной строке
 ;был указан ключ "-". Выгружаемся из памяти
 remove:
-      cmp   word ptr es:magic,0BABAh;а мы ваще были загружены?
+      cmp   word ptr es:magic,0BABAh;а мы были загружены?
       jne   not_installed           ;не были - выходим
 
       push  es
@@ -158,7 +253,7 @@ remove:
       int   21h
 
       mov   dx,es:old_21_offset     ;востановим вектор прерывания
-      mov   ds,es:old_21_segment    ;28 как было
+      mov   ds,es:old_21_segment    ;21 как было
       mov   ax,2521h
       int   21h
 
@@ -166,49 +261,34 @@ remove:
       pop   es
       mov   ah,49h                  ;освобождаем память
       int   21h
-      jc    not_remove              ;не освободилась? Хз - ошибка
+      jc    not_remove              ;не освободилась? ошибка
 
-      mov   dx,offset removed_msg   ;выводим сообщение - все ок
-      mov   ah,9                    ;выгрузились
-      int   21h
-      jmp   exit                    ;выходим воще из проги
+      print_mes 'tsr successful removed'
+      jmp   exit                    ;выходим
 
 ;Сюда попадаем если был указан ключ "-", но перед
 ;этим tsr не был загружен
 not_installed:
-      mov   dx, offset noinst_msg
-      mov   ah,9
-      int   21h
+      print_mes 'tsr not installed. Nothing remove'
       jmp   exit
 
-;Какая-то ошибка с высвобождением памяти.
+; ошибка с высвобождением памяти.
 not_remove:
-      mov   dx, offset noremove_msg
-      mov   ah,9
-      int   21h
+      print_mes 'Can not remove tsr. Error'
       jmp   exit
 
 ;Пользователь пытается повторно загрузить прогу
 already_inst:
-      mov   dx, offset already_msg
-      mov   ah,9
-      int   21h
+      print_mes 'tsr already installed'
       jmp   exit
 
 ;Не хватает памяти чтоб остаться резидентом
 not_mem:
-      mov   dx, offset nomem_msg
-      mov   ah,9
-      int   21h
+      print_mes 'No free memory for loading tsr'
+      jmp exit
 
 ;Выходим из программы
 exit:
       int  20h
 
-ok_installed      db 'tsr successful installed$'
-already_msg       db 'tsr already installed$'
-nomem_msg         db 'No free memory for loading tsr$'
-removed_msg       db 'tsr successful removed$'
-noremove_msg      db 'Can not remove tsr. Error$'
-noinst_msg        db 'tsr not installed. Nothing remove$'
 END
