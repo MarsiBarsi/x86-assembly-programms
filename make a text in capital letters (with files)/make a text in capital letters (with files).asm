@@ -106,27 +106,27 @@ ok_of_opening:
   xor si,si
 
 main_cycle:
-      cmp Buf[si], 122    ;
-      jg not_our  ;
-      cmp Buf[si], 97
-      jl not_our
+      cmp Buf[si], 122    ; if between 96 and 122 - our
+      jg not_our          ; because 96-122 - small latyn letters
+      cmp Buf[si], 97     ;
+      jl not_our          ;
 
   our_symbol:
-      mov al,Buf[si]
-      sub al,32
-      mov Buf[si],al
+      mov al,Buf[si]      ; make symbol capital (ascii code -= 32 )
+      sub al,32           ;
+      mov Buf[si],al      ;
 
   not_our:
-      inc si
+      inc si              ; si++
 
-      cmp Buf[si],0
-      je new_file
+      cmp Buf[si],0       ; if 0 - it is the end of the file
+      je new_file         ;
 
 jmp main_cycle
 
 
 new_file:
-          dec si
+          dec si          ; si-- because now Buf[si] - 0
 
           next_line
           print_mes 'Please, input name of new file > '
@@ -138,17 +138,17 @@ new_file:
           next_line
         ;===============================================================
           xor BH, BH
-          mov BL, FileName[1]
-          mov FileName[BX+2], 0
+          mov BL, FileName[1]           ; get lenght of the filename
+          mov FileName[BX+2], 0         ; make ascii-z string with 0 at end
         ;===============================================================
           mov AX, 3D01h ; Open the new file for write
           mov DX, offset FileName+2
           int 21h
 
-          mov Handler, AX
+          mov Handler, AX       ; handler is a logical number of the new file
 
-          jnc write_buf_into_file
-          jmp error_of_opening_new
+          jnc write_buf_into_file       ; if there are not mistakes - jump
+          jmp error_of_opening_new      ; if there are some mistakes
 
 ;===============writing of text=======================
 
