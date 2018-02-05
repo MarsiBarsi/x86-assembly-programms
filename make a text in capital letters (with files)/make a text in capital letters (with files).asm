@@ -107,9 +107,15 @@ ok_of_opening:
 
 main_cycle:
       cmp Buf[si], 122    ; if between 96 and 122 - our
-      jg not_our          ; because 96-122 - small latyn letters
+      jl our_symbol         ; because 96-122 - small latyn letters
       cmp Buf[si], 97     ;
-      jl not_our          ;
+      jg our_symbol          ;
+
+      cmp Buf[si], 192
+      jl not_our
+      cmp Buf[si], 255      ;
+      je not_our   ;
+
 
   our_symbol:
       mov al,Buf[si]      ; make symbol capital (ascii code -= 32 )

@@ -7,7 +7,7 @@
 magic       dw 0BABAh               ;идентификатор - уже сидим в памяти
 Name_of_File     db 14,0,14 dup (0)      ;имя файла
 handle            dw 0              ;заголовок (хендл)
-access_status  db 1                    ;флаг готовности к записи
+access_status  db 1                    ;флаг готовности
 
 mes db 'sorry,this file is blocked',10,13,'$'
 
@@ -37,7 +37,7 @@ call_old_09:
       pop   ds
       pop   es
       popa
-      popf                          ;востановим всю хренотень
+      popf                          ;востановим все флаги
       db 0eah                       ;jmp dword ptr (опкод)
 old_09_offset  dw ?                 ;здесь уже конкретный адрес
 old_09_segment dw ?                 ;старого Int 09. прыгаем туда
